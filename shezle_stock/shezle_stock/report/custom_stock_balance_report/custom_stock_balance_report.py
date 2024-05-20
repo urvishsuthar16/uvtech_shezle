@@ -22,7 +22,7 @@ def execute(filters=None):
         },
         
 		{
-            'fieldname': 'barcode_no',
+            'fieldname': 'barcode',
             'label': 'Barcode No',
             'fieldtype': 'Data',            
         },
@@ -39,21 +39,21 @@ def execute(filters=None):
 			'options' : "Item Group"
         }
 		,
-		{
-            'fieldname': 'warehouse_id',
-            'label': 'Warehouse ID',
-            'fieldtype': 'Data',
-        },
+		# {
+        #     'fieldname': 'warehouse_id',
+        #     'label': 'Warehouse ID',
+        #     'fieldtype': 'Data',
+        # },
 		{
             'fieldname': 'warehouse_name',
             'label': 'Warehouse Name',
             'fieldtype': 'Data',
         },
-		# {
-        #     'fieldID': 'location_name',
-        #     'label': 'Location Name',
-        #     'fieldtype': 'Data',            
-        # },
+		{
+            'fieldID': 'location_name',
+            'label': 'Location Name',
+            'fieldtype': 'Data',            
+        },
 		{
             'fieldname': 'qty',
             'label': 'Qty',
@@ -81,12 +81,12 @@ def execute(filters=None):
         # }
 		
 	]
-	# data = get_data()
-	data = [
-		{
+	data = get_data_updated()
+	# data = [
+	# 	{
 
-		}
-	]
+	# 	}
+	# ]
 	return columns, data
 
 def get_data():
@@ -131,16 +131,40 @@ def get_data():
 
     return data
 
-def get_data_updated():
-	query = """ SELECT item_code as item_code_number, item_name FROM `tabItem`
-				WHERE has_variants = 1;
-			"""
-	item_templates = frappe.db.sql(query, as_dict=True)
-	
-	for item_template in item_templates:
-		# variants = frappe.db.get_list("Item", {"variant_of" : item_template['item_code']}, pluck='name')
-		query = f""" SELECT item_code, item_group FROM `tabItem`
-					WHERE variant_of = '{item_template}';
-		"""
-		data = frappe.db.sql(query, as_dict=True)
-		
+def get_data_updated():	
+    
+    # query = """
+    #     SELECT pii.item_code, it.barcode as barcode ,it.item_group, it.variant_of as item_code_number,pii.warehouse as warehouse_name, pii.uom as stock_uom, SUM(pii.qty) as qty,
+    #         ROUND(SUM(pii.qty*pii.rate)/SUM(pii.qty),2) as effective_unit_rate , SUM(pii.qty) * ROUND(SUM(pii.qty*pii.rate)/SUM(pii.qty),2) as value
+    #         FROM `tabPurchase Invoice Item` pii INNER JOIN (SELECT item.item_code, item_barcode.barcode, item.item_group, item.variant_of  FROM 
+    #                                                                 `tabItem` as item LEFT JOIN `tabItem Barcode` as item_barcode
+    #                                                                 ON item.name = item_barcode.parent 
+    #                                                                 ) AS it
+    #                                                                 ON pii.item_code = it.item_code
+    #         GROUP BY it.item_code;
+    #     """
+    query = """ 
+        SELECT pii.item_code, it.barcode as barcode ,it.item_group, it.variant_of as item_code_number,pii.warehouse as warehouse_name, 
+        pii.warehouse_location as location_name, pii.uom as stock_uom, SUM(pii.qty) as qty,
+        ROUND(SUM(pii.qty*pii.rate)/SUM(pii.qty),2) as effective_unit_rate , SUM(pii.qty) * ROUND(SUM(pii.qty*pii.rate)/SUM(pii.qty),2) as value FROM 
+    
+            (SELECT piit.item_code, piit.warehouse, piit.uom, piit.qty, piit.rate, warehouse.custom_location as warehouse_location
+                FROM `tabPurchase Invoice Item` as piit LEFT JOIN `tabWarehouse` as warehouse 
+                ON piit.warehouse = warehouse.name ) AS pii INNER JOIN 
+
+            (SELECT item.item_code, item_barcode.barcode, item.item_group, item.variant_of  FROM 
+                `tabItem` as item LEFT JOIN `tabItem Barcode` as item_barcode
+                ON item.name = item_barcode.parent
+                ) AS it
+    
+        ON pii.item_code = it.item_code
+
+        GROUP BY it.item_code;
+    """
+    data = frappe.db.sql(query, as_dict=True)
+    
+    for d in data:
+        d['item_name'] = frappe.db.get_value("Item", d['item_code_number'], 'item_name')
+
+    # data.sort(key=lambda k : k['item_code_number'])
+    return data

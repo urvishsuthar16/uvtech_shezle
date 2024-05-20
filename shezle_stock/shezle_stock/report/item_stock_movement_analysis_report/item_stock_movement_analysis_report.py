@@ -3,11 +3,7 @@ from frappe import _
 
 def execute(filters=None):
     columns = [
-        {
-            'fieldname': "period",
-            'label': _('Period'),
-            'fieldtype': 'Data',
-        },
+       
         {
             'fieldname': 'item_code_number',
             'label': _('Item Code Number'),
@@ -55,78 +51,77 @@ def execute(filters=None):
         },
         {
             'fieldname': 'csi',
-            'label': _("Total TaxeS (CGST / SGST / IGST") ,
+            'label': _("Total Taxes (CGST / SGST / IGST)"),
             'fieldtype': 'Data',
         },
-
         {
             'fieldname': 't_a',
-            'label': _('Total Additions '),
+            'label': _('Total Additions'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 't_r',
-            'label': _('Total Reductions '),
+            'label': _('Total Reductions'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 't_g_t_v',
-            'label': _('Total Gross Total Value '),
+            'label': _('Total Gross Total Value'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'tpt',
-            'label': _('Total Packaging Type '),
+            'label': _('Total Packaging Type'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'pq',
-            'label': _('Packaging Quantity '),
+            'label': _('Packaging Quantity'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'c_total_in_qty',
-            'label': _('Total In Qty. '),
+            'label': _('Customer Total In Qty.'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'c_e_u_p',
-            'label': _('Effective Unit Price '),
+            'label': _('Customer Effective Unit Price'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'c_n_t_v',
-            'label': _('Net Total Value '),
+            'label': _('Customer Net Total Value'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'ccsi',
-            'label': _("Total TaxeS (CGST / SGST / IGST") ,
+            'label': _("Customer Total Taxes (CGST / SGST / IGST)"),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'c_t_a',
-            'label': _('Total Additions '),
+            'label': _('Customer Total Additions'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'c_t_r',
-            'label': _('Total Reductions '),
+            'label': _('Customer Total Reductions'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'c_t_g_t_v',
-            'label': _('Total Gross Total Value '),
+            'label': _('Customer Total Gross Total Value'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'c_tpt',
-            'label': _('Total Packaging Type ('),
+            'label': _('Customer Total Packaging Type'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'c_pq',
-            'label': _('Packaging Quantity '),
+            'label': _('Customer Packaging Quantity'),
             'fieldtype': 'Data',
         },
     ]
@@ -139,8 +134,8 @@ def execute(filters=None):
     for invoice in invoices_with_items:
         customer_data = find_customer_data(invoice.get('item_code'), sales_orders_with_customers)
         data.append({
-            'period': invoice.get('posting_date'),
-            'item_code_number': invoice.get('item_code'),
+           
+            "item_code_number" :invoice.get('item_code_number'),
             'item_name': invoice.get('item_name'),
             'item_code_name': invoice.get('item_code'),
             'client_id': invoice.get('name'),  # Fill this according to your requirement
@@ -149,22 +144,21 @@ def execute(filters=None):
             'total_in_qty': invoice.get('total_qty'),
             'e_u_p': invoice.get('effective_unit_price'),
             'n_t_v': invoice.get('net_total_value'),
-            't_a': invoice.get(''),
+            't_a': invoice.get('total_additions'),
             't_r': invoice.get('discount_amount'),
             't_g_t_v': invoice.get('outstanding_amount'),  # Assuming you add this field in the query
             'tpt': invoice.get('uom'),
             'pq': invoice.get('total_qty'),  # Assuming this is the same as total in qty
-            'csi'   : invoice.get('total_gst'),
+            'csi': invoice.get('total_gst'),
             'c_total_in_qty': customer_data.get('total_qty', ''),
             'c_e_u_p': customer_data.get('effective_unit_price', ''),
             'c_n_t_v': customer_data.get('net_total_value', ''),
             'c_t_a': customer_data.get('total_additions', ''),
-            'c_t_r': customer_data.get('discount_amount', ''),
-            'c_t_g_t_v': customer_data.get('total_gross_total_value', ''),
+            'c_t_r': customer_data.get('total_reductions', ''),
+            'c_t_g_t_v': customer_data.get('outstanding_amount_c', ''),
             'c_tpt': customer_data.get('uom', ''),
             'c_pq': customer_data.get('total_qty', ''),
             'ccsi': customer_data.get('total_gst_c', ''),
-
         })
 
     # If you have chart data, define it here
@@ -178,7 +172,50 @@ def get_invoice_with_items():
     sql_query = """
     SELECT 
         pi.supplier AS supplier_name,
-        pi.posting_date,
+       
+        pii.item_code,
+        pii.item_name,
+        SUM(pii.qty) AS total_qty,
+        ROUND((SUM(pii.amount) / SUM(pii.qty)), 2) AS effective_unit_price,
+        SUM(pii.amount) AS net_total_value,
+        
+        SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
+        SUM(pii.amount) AS total_gross_total_value,
+        pii.uom,
+        pi.discount_amount,
+        SUM(SUM(pii.amount) + SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount - pi.discount_amount)) OVER (PARTITION BY pi.supplier, pii.item_code, pii.item_name) AS outstanding_amount,
+        SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst,
+        pi.name
+    FROM 
+        `tabPurchase Invoice` pi
+    JOIN 
+        `tabPurchase Invoice Item` pii ON pi.name = pii.parent
+    WHERE
+    pi.update_stock = 1
+
+    GROUP BY 
+        pi.supplier, pii.item_code, pii.item_name
+    """
+    invoices_with_items = frappe.db.sql(sql_query, as_dict=True)
+    
+    # Fetch additional data from the "Item" table for each item code
+    for d in invoices_with_items:
+        # Fetch item code from the "Item" table
+        item_doc = frappe.get_doc("Item", d['item_code'])
+        # Assign additional item data to the dictionary
+        d['item_code_number'] = item_doc.variant_of
+       
+        
+         
+    return invoices_with_items
+
+
+def get_sales_order_with_customer():
+   
+    sql_query = """
+
+    SELECT 
+        pi.customer_name AS customer_name,
         pii.item_code,
         pii.item_name,
         SUM(pii.qty) AS total_qty,
@@ -189,36 +226,8 @@ def get_invoice_with_items():
         SUM(pii.amount) AS total_gross_total_value,
         pii.uom,
         pi.discount_amount,
-        pi.outstanding_amount,
-        SUM( pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst,
-        pi.name
-    FROM 
-        `tabPurchase Invoice` pi
-    JOIN 
-        `tabPurchase Invoice Item` pii ON pi.name = pii.parent
-    GROUP BY 
-        pi.supplier, pi.posting_date, pii.item_code, pii.item_name
-    """
-
-    invoices_with_items = frappe.db.sql(sql_query, as_dict=True)
-    return invoices_with_items
-
-
-def get_sales_order_with_customer():
-    sql_query = """
-    SELECT 
-        pi.customer_name AS customer_name,
-        pii.item_code,
-        pii.item_name,
-        SUM(pii.qty) AS total_qty,
-        ROUND((SUM(pii.amount) / SUM(pii.qty)), 2) AS effective_unit_price,
-        SUM(pii.amount) AS net_total_value,
-        SUM(CASE WHEN pii.qty > 0 THEN pii.amount ELSE 0 END) AS total_additions,
-        SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
-        pi.outstanding_amount AS total_gross_total_value,
-        pii.uom,
-        pi.discount_amount,
-        SUM( pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst_c
+        SUM(SUM(pii.amount) + SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount - pi.discount_amount)) OVER (PARTITION BY pi.customer_name, pii.item_code, pii.item_name) AS outstanding_amount_c,
+        SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst_c
     FROM 
         `tabSales Invoice` pi
     JOIN 
