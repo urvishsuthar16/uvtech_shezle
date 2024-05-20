@@ -34,31 +34,137 @@ def execute(filters=None):
             'fieldtype': 'Data',
         },
         {
+            'fieldname': 'customer_name',
+            'label': _('Customer Name'),
+            'fieldtype': 'Data',
+        },
+        {
             'fieldname': 'total_in_qty',
-            'label': _('Total In Qty.'),
+            'label': _('Total In Qty. (Supplier)'),
             'fieldtype': 'Data',
         },
         {
             'fieldname': 'e_u_p',
-            'label': _('Effective Unit Price'),
+            'label': _('Effective Unit Price (Supplier)'),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'n_t_v',
+            'label': _('Net Total Value (Supplier)'),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'csi',
+            'label': _("Total TaxeS (CGST / SGST / IGST") ,
             'fieldtype': 'Data',
         },
 
+        {
+            'fieldname': 't_a',
+            'label': _('Total Additions '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 't_r',
+            'label': _('Total Reductions '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 't_g_t_v',
+            'label': _('Total Gross Total Value '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'tpt',
+            'label': _('Total Packaging Type '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'pq',
+            'label': _('Packaging Quantity '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'c_total_in_qty',
+            'label': _('Total In Qty. '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'c_e_u_p',
+            'label': _('Effective Unit Price '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'c_n_t_v',
+            'label': _('Net Total Value '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'ccsi',
+            'label': _("Total TaxeS (CGST / SGST / IGST") ,
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'c_t_a',
+            'label': _('Total Additions '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'c_t_r',
+            'label': _('Total Reductions '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'c_t_g_t_v',
+            'label': _('Total Gross Total Value '),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'c_tpt',
+            'label': _('Total Packaging Type ('),
+            'fieldtype': 'Data',
+        },
+        {
+            'fieldname': 'c_pq',
+            'label': _('Packaging Quantity '),
+            'fieldtype': 'Data',
+        },
     ]
 
     invoices_with_items = get_invoice_with_items()
-    
-    # Construct data dictionary based on retrieved invoices with items
+    sales_orders_with_customers = get_sales_order_with_customer()
+
+    # Construct data dictionary based on retrieved invoices with items and sales orders
     data = []
     for invoice in invoices_with_items:
+        customer_data = find_customer_data(invoice.get('item_code'), sales_orders_with_customers)
         data.append({
-            'period': invoice.get('posting_date'),  # Adjust this according to your requirement
+            'period': invoice.get('posting_date'),
             'item_code_number': invoice.get('item_code'),
             'item_name': invoice.get('item_name'),
             'item_code_name': invoice.get('item_code'),
-            'client_id': '',  # Fill this according to your requirement
-            'supplier_name': invoice.get('supplier'),
-            "total_in_qty" : invoice.get('qty')
+            'client_id': invoice.get('name'),  # Fill this according to your requirement
+            'supplier_name': invoice.get('supplier_name'),
+            'customer_name': customer_data.get('customer_name', ''),  # Append customer name
+            'total_in_qty': invoice.get('total_qty'),
+            'e_u_p': invoice.get('effective_unit_price'),
+            'n_t_v': invoice.get('net_total_value'),
+            't_a': invoice.get(''),
+            't_r': invoice.get('discount_amount'),
+            't_g_t_v': invoice.get('outstanding_amount'),  # Assuming you add this field in the query
+            'tpt': invoice.get('uom'),
+            'pq': invoice.get('total_qty'),  # Assuming this is the same as total in qty
+            'csi'   : invoice.get('total_gst'),
+            'c_total_in_qty': customer_data.get('total_qty', ''),
+            'c_e_u_p': customer_data.get('effective_unit_price', ''),
+            'c_n_t_v': customer_data.get('net_total_value', ''),
+            'c_t_a': customer_data.get('total_additions', ''),
+            'c_t_r': customer_data.get('discount_amount', ''),
+            'c_t_g_t_v': customer_data.get('total_gross_total_value', ''),
+            'c_tpt': customer_data.get('uom', ''),
+            'c_pq': customer_data.get('total_qty', ''),
+            'ccsi': customer_data.get('total_gst_c', ''),
+
         })
 
     # If you have chart data, define it here
@@ -71,19 +177,62 @@ def get_invoice_with_items():
     # Write a SQL query to retrieve purchase invoices along with supplier, posting date, and items
     sql_query = """
     SELECT 
-        pi.supplier,
+        pi.supplier AS supplier_name,
         pi.posting_date,
         pii.item_code,
         pii.item_name,
-        pii.qty,
-        SUM(pii.qty) AS total_qty
+        SUM(pii.qty) AS total_qty,
+        ROUND((SUM(pii.amount) / SUM(pii.qty)), 2) AS effective_unit_price,
+        SUM(pii.amount) AS net_total_value,
+        SUM(CASE WHEN pii.qty > 0 THEN pii.amount ELSE 0 END) AS total_additions,
+        SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
+        SUM(pii.amount) AS total_gross_total_value,
+        pii.uom,
+        pi.discount_amount,
+        pi.outstanding_amount,
+        SUM( pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst,
+        pi.name
     FROM 
         `tabPurchase Invoice` pi
     JOIN 
         `tabPurchase Invoice Item` pii ON pi.name = pii.parent
     GROUP BY 
         pi.supplier, pi.posting_date, pii.item_code, pii.item_name
-"""
+    """
 
     invoices_with_items = frappe.db.sql(sql_query, as_dict=True)
     return invoices_with_items
+
+
+def get_sales_order_with_customer():
+    sql_query = """
+    SELECT 
+        pi.customer_name AS customer_name,
+        pii.item_code,
+        pii.item_name,
+        SUM(pii.qty) AS total_qty,
+        ROUND((SUM(pii.amount) / SUM(pii.qty)), 2) AS effective_unit_price,
+        SUM(pii.amount) AS net_total_value,
+        SUM(CASE WHEN pii.qty > 0 THEN pii.amount ELSE 0 END) AS total_additions,
+        SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
+        pi.outstanding_amount AS total_gross_total_value,
+        pii.uom,
+        pi.discount_amount,
+        SUM( pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst_c
+    FROM 
+        `tabSales Invoice` pi
+    JOIN 
+        `tabSales Invoice Item` pii ON pi.name = pii.parent
+    GROUP BY 
+        pi.customer_name, pii.item_code, pii.item_name
+    """
+
+    salesorder_with_items = frappe.db.sql(sql_query, as_dict=True)
+    return salesorder_with_items
+
+
+def find_customer_data(item_code, sales_orders):
+    for order in sales_orders:
+        if order['item_code'] == item_code:
+            return order
+    return {}
