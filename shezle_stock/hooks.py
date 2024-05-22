@@ -213,3 +213,12 @@ app_license = "MIT"
 # auth_hooks = [
 # 	"shezle_stock.auth.validate"
 # ]
+fixtures=[
+     {"dt": "Custom Field", "filters": [
+		[
+			"name", "in", [
+            "Warehouse-custom_location",
+				]
+		]
+	]},
+]
