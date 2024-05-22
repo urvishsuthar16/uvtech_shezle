@@ -4,6 +4,13 @@
 
 frappe.query_reports["Custom Stock balance report"] = {
 	"filters": [
+		{
+			fieldname: 'item',
+			label: __('Item'),
+			fieldtype: 'Item',
+			options: 'Item',
+			default: frappe.defaults.get_user_default('item')
+		},
 
 	]
 };

@@ -153,8 +153,8 @@ def execute(filters=None):
             'c_total_in_qty': customer_data.get('total_qty', ''),
             'c_e_u_p': customer_data.get('effective_unit_price', ''),
             'c_n_t_v': customer_data.get('net_total_value', ''),
-            'c_t_a': customer_data.get('total_additions', ''),
-            'c_t_r': customer_data.get('total_reductions', ''),
+            'c_t_a': customer_data.get('', ''),
+            'c_t_r': customer_data.get('discount_amount'),
             'c_t_g_t_v': customer_data.get('outstanding_amount_c', ''),
             'c_tpt': customer_data.get('uom', ''),
             'c_pq': customer_data.get('total_qty', ''),
@@ -194,7 +194,7 @@ def get_invoice_with_items():
     pi.update_stock = 1
 
     GROUP BY 
-        pi.supplier, pii.item_code, pii.item_name
+        pi.supplier, pii.item_code , pii.item_name
     """
     invoices_with_items = frappe.db.sql(sql_query, as_dict=True)
     

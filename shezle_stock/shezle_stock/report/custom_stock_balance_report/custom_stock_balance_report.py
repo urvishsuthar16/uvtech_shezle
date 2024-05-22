@@ -150,7 +150,8 @@ def get_data_updated():
     
             (SELECT piit.item_code, piit.warehouse, piit.uom, piit.qty, piit.rate, warehouse.custom_location as warehouse_location
                 FROM `tabPurchase Invoice Item` as piit LEFT JOIN `tabWarehouse` as warehouse 
-                ON piit.warehouse = warehouse.name ) AS pii INNER JOIN 
+                ON piit.warehouse = warehouse.name 
+                WHERE piit.parent in (SELECT name FROM `tabPurchase Invoice` WHERE update_stock = 1)) AS pii INNER JOIN 
 
             (SELECT item.item_code, item_barcode.barcode, item.item_group, item.variant_of  FROM 
                 `tabItem` as item LEFT JOIN `tabItem Barcode` as item_barcode
