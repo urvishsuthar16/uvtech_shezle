@@ -14,3 +14,4 @@ frappe.query_reports["Custom Stock balance report"] = {
 
 	]
 };
+// changesss
