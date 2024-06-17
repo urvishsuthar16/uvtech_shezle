@@ -85,8 +85,8 @@ def compile_data(invoices, sales_orders_with_customers):
             'additions': invoice.get('total_additions', ''),
             'reductions': invoice.get('discount_amount', ''),
             'gross_total_value': invoice.get('total_gross_total_value'),
-            'warehouse_id_in': invoice.get('warehouse_id_in'),
-            'warehouse_name_in': invoice.get('warehouse'),
+            # 'warehouse_id_in': invoice.get('warehouse_id_in'),
+            # 'warehouse_name_in': invoice.get('warehouse'),
             'location_name_in': invoice.get('location_name_in'),
             'location_id_in': invoice.get('location_id'),
             'packaging_type_in': invoice.get('uom'),
@@ -121,7 +121,7 @@ def get_invoice_with_items():
         SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
         SUM(pii.amount) AS total_gross_total_value,
         pii.uom,
-        pii.warehouse,
+        # pii.warehouse,
         pi.discount_amount,
         SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
     FROM 
@@ -146,10 +146,10 @@ def get_invoice_with_items():
         else:
             d['barcode'] = ''
 
-    for w in invoices_with_items:
-        Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
-        w['warehouse_id_in'] = Warehouse.warehouse_name
-        w['location_name_in'] = Warehouse.custom_location
+    # for w in invoices_with_items:
+    #     Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
+    #     w['warehouse_id_in'] = Warehouse.warehouse_name
+    #     w['location_name_in'] = Warehouse.custom_location
     
     return invoices_with_items
 
@@ -167,7 +167,7 @@ def get_sales_order_with_customer():
         SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
         SUM(pii.amount) AS total_gross_total_value,
         pii.uom,
-        pii.warehouse,
+        # pii.warehouse,
         pi.discount_amount,
         SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
     FROM 
@@ -179,10 +179,10 @@ def get_sales_order_with_customer():
     """
     sales_orders_with_customers = frappe.db.sql(sql_query, as_dict=True)
 
-    for sales in sales_orders_with_customers:
-        Warehouse_sales = frappe.get_doc('Warehouse', sales['warehouse'])
-        sales['warehouse_id_out'] = Warehouse_sales.warehouse_name
-        sales['location_name_out'] = Warehouse_sales.custom_location
+    # for sales in sales_orders_with_customers:
+    #     Warehouse_sales = frappe.get_doc('Warehouse', sales['warehouse'])
+    #     sales['warehouse_id_out'] = Warehouse_sales.warehouse_name
+    #     sales['location_name_out'] = Warehouse_sales.custom_location
 
     return sales_orders_with_customers
 
@@ -204,7 +204,7 @@ def get_invoice_with_items_purchse():
         SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
         SUM(pii.amount) AS total_gross_total_value,
         pii.uom,
-        pii.warehouse,
+        # pii.warehouse,
         pi.discount_amount,
         SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
     FROM 
@@ -227,10 +227,10 @@ def get_invoice_with_items_purchse():
         else:
             d['barcode'] = ''
 
-    for w in invoices_with_items:
-        Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
-        w['warehouse_id_in'] = Warehouse.warehouse_name
-        w['location_name_in'] = Warehouse.custom_location
+    # for w in invoices_with_items:
+    #     Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
+    #     w['warehouse_id_in'] = Warehouse.warehouse_name
+    #     w['location_name_in'] = Warehouse.custom_location
     
     return invoices_with_items
 
@@ -248,7 +248,7 @@ def get_invoice_with_items_return_not():
         SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
         SUM(pii.amount) AS total_gross_total_value,
         pii.uom,
-        pii.warehouse,
+        # pii.warehouse,
         pi.discount_amount,
         SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
     FROM 
@@ -273,10 +273,10 @@ def get_invoice_with_items_return_not():
         else:
             d['barcode'] = ''
 
-    for w in invoices_with_items:
-        Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
-        w['warehouse_id_in'] = Warehouse.warehouse_name
-        w['location_name_in'] = Warehouse.custom_location
+    # for w in invoices_with_items:
+    #     Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
+    #     w['warehouse_id_in'] = Warehouse.warehouse_name
+    #     w['location_name_in'] = Warehouse.custom_location
     
     return invoices_with_items
 
