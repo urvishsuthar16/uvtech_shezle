@@ -1,21 +1,23 @@
 import frappe
 
-
 def execute(filters):
+    item_filter = filters.get('item')
+    customer_filter = filters.get('customer')
+
     # Get column definitions
     columns = get_columns()
-    
-    # Fetch and compile data
-    invoices_with_items = get_invoice_with_items()
-    invoices_with_items_purchase = get_invoice_with_items_purchse()
-    sales_orders_with_customers = get_sales_order_with_customer()
-    get_invoice_with_items_return = get_invoice_with_items_return_not()
-    get_sales_order_with_customer_return = get_sales_order_with_customer_return_not()
-    
+
+    # Fetch and compile data with filters
+    invoices_with_items = get_invoice_with_items(item_filter)
+    invoices_with_items_purchase = get_invoice_with_items_purchase(item_filter)
+    sales_orders_with_customers = get_sales_order_with_customer(item_filter, customer_filter)
+    invoices_with_items_return = get_invoice_with_items_return(item_filter)
+    sales_orders_with_customers_return = get_sales_order_with_customer_return(item_filter, customer_filter)
+
     # Combine data from different sources
     data = compile_data(invoices_with_items, sales_orders_with_customers)
     data += compile_data(invoices_with_items_purchase, sales_orders_with_customers)
-    data += compile_data(get_invoice_with_items_return, get_sales_order_with_customer_return)
+    data += compile_data(invoices_with_items_return, sales_orders_with_customers_return)
 
     chart_data = None  # Placeholder for chart data if needed
     return columns, data, None, chart_data
@@ -85,8 +87,6 @@ def compile_data(invoices, sales_orders_with_customers):
             'additions': invoice.get('total_additions', ''),
             'reductions': invoice.get('discount_amount', ''),
             'gross_total_value': invoice.get('total_gross_total_value'),
-            # 'warehouse_id_in': invoice.get('warehouse_id_in'),
-            # 'warehouse_name_in': invoice.get('warehouse'),
             'location_name_in': invoice.get('location_name_in'),
             'location_id_in': invoice.get('location_id'),
             'packaging_type_in': invoice.get('uom'),
@@ -108,8 +108,12 @@ def compile_data(invoices, sales_orders_with_customers):
         })
     return data
 
-def get_invoice_with_items():
-    sql_query = """
+def get_invoice_with_items(item_name=None):
+    conditions = ""
+    if item_name:
+        conditions += f" AND pii.item_code = '{item_name}'"
+        
+    sql_query = f"""
     SELECT 
         pii.parenttype,
         pi.supplier AS supplier_name,
@@ -121,7 +125,6 @@ def get_invoice_with_items():
         SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
         SUM(pii.amount) AS total_gross_total_value,
         pii.uom,
-        # pii.warehouse,
         pi.discount_amount,
         SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
     FROM 
@@ -129,7 +132,8 @@ def get_invoice_with_items():
     JOIN 
         `tabPurchase Invoice Item` pii ON pi.name = pii.parent
     WHERE
-    pi.update_stock = 1
+        pi.update_stock = 1
+        {conditions}
     GROUP BY 
         pi.supplier, pii.item_code, pii.item_name
     """
@@ -143,102 +147,17 @@ def get_invoice_with_items():
         barcodes = item_doc.get('barcodes')
         if barcodes:
             d['barcode'] = barcodes[0].barcode
-        else:
-            d['barcode'] = ''
 
-    # for w in invoices_with_items:
-    #     Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
-    #     w['warehouse_id_in'] = Warehouse.warehouse_name
-    #     w['location_name_in'] = Warehouse.custom_location
-    
     return invoices_with_items
 
-def get_sales_order_with_customer():
-    sql_query = """
+def get_invoice_with_items_purchase(item_name=None):
+    conditions = ""
+    if item_name:
+        conditions += f" AND pii.item_code = '{item_name}'"
+        
+    sql_query = f"""
     SELECT 
         pii.parenttype,
-        pi.customer_name,
-        pii.item_code,
-        pii.item_name,
-        SUM(pii.qty) AS total_qty,
-        ROUND((SUM(pii.amount) / SUM(pii.qty)), 2) AS effective_unit_price,
-        SUM(pii.amount) AS net_total_value,
-        SUM(CASE WHEN pii.qty > 0 THEN pii.amount ELSE 0 END) AS total_additions,
-        SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
-        SUM(pii.amount) AS total_gross_total_value,
-        pii.uom,
-        # pii.warehouse,
-        pi.discount_amount,
-        SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
-    FROM 
-        `tabSales Invoice` pi
-    JOIN 
-        `tabSales Invoice Item` pii ON pi.name = pii.parent
-    GROUP BY 
-        pi.customer_name, pii.item_code, pii.item_name
-    """
-    sales_orders_with_customers = frappe.db.sql(sql_query, as_dict=True)
-
-    # for sales in sales_orders_with_customers:
-    #     Warehouse_sales = frappe.get_doc('Warehouse', sales['warehouse'])
-    #     sales['warehouse_id_out'] = Warehouse_sales.warehouse_name
-    #     sales['location_name_out'] = Warehouse_sales.custom_location
-
-    return sales_orders_with_customers
-
-def find_customer_data(item_code, sales_orders):
-    for order in sales_orders:
-        if order['item_code'] == item_code:
-            return order
-    return {}
-
-def get_invoice_with_items_purchse():
-    sql_query = """SELECT 
-        pi.supplier AS supplier_name,
-        pii.parenttype,
-        pii.item_code,
-        pii.item_name,
-        SUM(pii.qty) AS total_qty,
-        ROUND((SUM(pii.amount) / SUM(pii.qty)), 2) AS effective_unit_price,
-        SUM(pii.amount) AS net_total_value,
-        SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
-        SUM(pii.amount) AS total_gross_total_value,
-        pii.uom,
-        # pii.warehouse,
-        pi.discount_amount,
-        SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
-    FROM 
-        `tabPurchase Receipt` pi
-    JOIN 
-        `tabPurchase Receipt Item` pii ON pi.name = pii.parent
-    GROUP BY 
-        pi.supplier, pii.item_code, pii.item_name
-    """
-    invoices_with_items = frappe.db.sql(sql_query, as_dict=True)
-    
-    for d in invoices_with_items:
-        item_doc = frappe.get_doc("Item", d['item_code'])
-        d['item_code_number'] = item_doc.variant_of if item_doc else ''
-        d['item_group'] = item_doc.item_group if item_doc else ''
-        
-        barcodes = item_doc.get('barcodes')
-        if barcodes:
-            d['barcode'] = barcodes[0].barcode
-        else:
-            d['barcode'] = ''
-
-    # for w in invoices_with_items:
-    #     Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
-    #     w['warehouse_id_in'] = Warehouse.warehouse_name
-    #     w['location_name_in'] = Warehouse.custom_location
-    
-    return invoices_with_items
-
-
-
-def get_invoice_with_items_return_not():
-    sql_query = """SELECT 
-        pii.parenttype,
         pi.supplier AS supplier_name,
         pii.item_code,
         pii.item_name,
@@ -248,7 +167,6 @@ def get_invoice_with_items_return_not():
         SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
         SUM(pii.amount) AS total_gross_total_value,
         pii.uom,
-        # pii.warehouse,
         pi.discount_amount,
         SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
     FROM 
@@ -256,7 +174,8 @@ def get_invoice_with_items_return_not():
     JOIN 
         `tabPurchase Invoice Item` pii ON pi.name = pii.parent
     WHERE
-    pi.update_stock = 1 AND pi.is_return = 1
+        pi.update_stock = 0
+        {conditions}
     GROUP BY 
         pi.supplier, pii.item_code, pii.item_name
     """
@@ -270,63 +189,132 @@ def get_invoice_with_items_return_not():
         barcodes = item_doc.get('barcodes')
         if barcodes:
             d['barcode'] = barcodes[0].barcode
-        else:
-            d['barcode'] = ''
 
-    # for w in invoices_with_items:
-    #     Warehouse = frappe.get_doc('Warehouse', w['warehouse'])
-    #     w['warehouse_id_in'] = Warehouse.warehouse_name
-    #     w['location_name_in'] = Warehouse.custom_location
-    
     return invoices_with_items
 
-
-
-
-
-
-
-
-
-def get_sales_order_with_customer_return_not():
-    sql_query = """
-    SELECT 
-        pii.parenttype,
-        pi.customer_name,
-        pii.item_code,
-        pii.item_name,
-        SUM(pii.qty) AS total_qty,
-        ROUND((SUM(pii.amount) / SUM(pii.qty)), 2) AS effective_unit_price,
-        SUM(pii.amount) AS net_total_value,
-        SUM(CASE WHEN pii.qty > 0 THEN pii.amount ELSE 0 END) AS total_additions,
-        SUM(CASE WHEN pii.qty < 0 THEN pii.amount ELSE 0 END) AS total_reductions,
-        SUM(pii.amount) AS total_gross_total_value,
-        pii.uom,
-        pii.warehouse,
-        pi.discount_amount,
-        SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
-    FROM 
-        `tabSales Invoice` pi
-    JOIN 
-        `tabSales Invoice Item` pii ON pi.name = pii.parent
+def get_sales_order_with_customer(item_name=None, customer_name=None):
+    conditions = ""
+    
+    if customer_name:
+        conditions += f" AND so.customer_name = '{customer_name}'"
+    
+    sql_query = f"""
+    SELECT
+        sii.parenttype,
+        sii.item_code,
+        so.customer_name,
+        SUM(sii.qty) AS total_qty,
+        ROUND((SUM(sii.amount) / SUM(sii.qty)), 2) AS effective_unit_price,
+        SUM(sii.amount) AS net_total_value,
+        SUM(CASE WHEN sii.qty < 0 THEN sii.amount ELSE 0 END) AS total_reductions,
+        SUM(sii.amount) AS total_gross_total_value,
+        sii.uom,
+        so.discount_amount,
+        SUM(sii.cgst_amount + sii.sgst_amount + sii.igst_amount) AS total_gst
+        
+    FROM
+        `tabSales Order` so
+    JOIN
+        `tabSales Order Item` sii ON so.name = sii.parent
     WHERE
-    pi.is_return = 1
-    
-    GROUP BY 
-        pi.customer_name, pii.item_code, pii.item_name
-    
+        1=1
+        {conditions}
+    GROUP BY
+        sii.item_code, so.customer_name
     """
     sales_orders_with_customers = frappe.db.sql(sql_query, as_dict=True)
-
-    for sales in sales_orders_with_customers:
-        Warehouse_sales = frappe.get_doc('Warehouse', sales['warehouse'])
-        sales['warehouse_id_out'] = Warehouse_sales.warehouse_name
-        sales['location_name_out'] = Warehouse_sales.custom_location
-
     return sales_orders_with_customers
 
-def find_customer_data(item_code, sales_orders):
-    for order in sales_orders:
+def get_invoice_with_items_return(item_name=None):
+    conditions = ""
+    if item_name:
+        conditions += f" AND sii.item_code = '{item_name}'"
+        
+    sql_query = f"""
+    SELECT 
+        sii.parenttype,
+        si.customer_name,
+        sii.item_code,
+        sii.item_name,
+        SUM(sii.qty) AS total_qty,
+        ROUND((SUM(sii.amount) / SUM(sii.qty)), 2) AS effective_unit_price,
+        SUM(sii.amount) AS net_total_value,
+        SUM(CASE WHEN sii.qty < 0 THEN sii.amount ELSE 0 END) AS total_reductions,
+        SUM(sii.amount) AS total_gross_total_value,
+        sii.uom,
+        si.discount_amount,
+        SUM(sii.cgst_amount + sii.sgst_amount + sii.igst_amount) AS total_gst
+    FROM 
+        `tabSales Invoice` si
+    JOIN 
+        `tabSales Invoice Item` sii ON si.name = sii.parent
+    WHERE
+        si.is_return = 1
+        {conditions}
+    GROUP BY 
+        sii.item_code, si.customer_name
+    """
+    invoices_with_items = frappe.db.sql(sql_query, as_dict=True)
+    
+    for d in invoices_with_items:
+        item_doc = frappe.get_doc("Item", d['item_code'])
+        d['item_code_number'] = item_doc.variant_of if item_doc else ''
+        d['item_group'] = item_doc.item_group if item_doc else ''
+        
+        barcodes = item_doc.get('barcodes')
+        if barcodes:
+            d['barcode'] = barcodes[0].barcode
+
+    return invoices_with_items
+
+def get_sales_order_with_customer_return(item_name=None, customer_name=None):
+    # Initialize the conditions string
+    conditions = ""
+    
+    # Append item name condition if provided
+    
+    
+    # Append customer name condition if provided
+    if customer_name:
+        conditions += f" AND si.customer_name = '{customer_name}'"
+    
+    # SQL query to retrieve the sales orders with customer returns
+    sql_query = f"""
+    SELECT
+        sii.parenttype,
+        sii.item_code,
+        si.customer_name,
+        SUM(sii.qty) AS total_qty,
+        ROUND((SUM(sii.amount) / SUM(sii.qty)), 2) AS effective_unit_price,
+        SUM(sii.amount) AS net_total_value,
+        SUM(CASE WHEN sii.qty < 0 THEN sii.amount ELSE 0 END) AS total_reductions,
+        SUM(sii.amount) AS total_gross_total_value,
+        sii.uom,
+        si.discount_amount,
+        SUM(sii.cgst_amount + sii.sgst_amount + sii.igst_amount) AS total_gst
+    FROM
+        `tabSales Invoice` si
+    JOIN
+        `tabSales Invoice Item` sii ON si.name = sii.parent
+    WHERE
+        si.is_return = 1
+        {conditions}
+    GROUP BY
+        sii.item_code, si.customer_name
+    """
+    
+    # Execute the SQL query
+    sales_orders_with_customers = frappe.db.sql(sql_query, as_dict=True)
+    
+    # Return the query results
+    return sales_orders_with_customers
+
+def find_customer_data(item_code, sales_orders_with_customers):
+    # Iterate through the list of sales orders with customer returns
+    for order in sales_orders_with_customers:
+        # Return the order if the item code matches
         if order['item_code'] == item_code:
             return order
+    
+    # Return an empty dictionary if no matching item code is found
     return {}

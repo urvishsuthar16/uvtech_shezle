@@ -1,12 +1,15 @@
-# Copyright (c) 2024, yes and contributors
-# For license information, please see license.txt
-
 import frappe
 
 def execute(filters=None):
+    if not filters:
+        filters = {}
+    item_name = filters.get('item')
+    periodicity = filters.get('periodicity')
+
     columns = get_columns()
-    data = get_data_updated()
+    data = get_data_updated(item_name, periodicity)
     return columns, data
+
 
 def get_columns():
     return [
@@ -65,11 +68,33 @@ def get_columns():
             'fieldname': 'value',
             'label': 'Value',
             'fieldtype': 'Data',
-        }
+        },
+        
     ]
 
-def get_data_updated():
-    query = """
+def get_data_updated(item_name, periodicity):
+    conditions = ""
+    if item_name:
+        conditions += " AND pii.item_code = %s"
+    
+    # Initialize start_date with None
+    start_date = None
+    
+    if periodicity:
+        today = frappe.utils.nowdate()
+        if periodicity == 'Monthly':
+            start_date = frappe.utils.add_months(today, -1)
+        elif periodicity == 'Quarterly':
+            start_date = frappe.utils.add_months(today, -3)
+        elif periodicity == 'Half-Yearly':
+            start_date = frappe.utils.add_months(today, -6)
+        elif periodicity == 'Yearly':
+            start_date = frappe.utils.add_years(today, -1)
+        
+    if start_date:
+        conditions += f" AND pi.posting_date >= '{start_date}'"
+    
+    query = f"""
         SELECT 
             pii.item_code, 
             it.barcode AS barcode,
@@ -78,18 +103,24 @@ def get_data_updated():
             pii.uom AS stock_uom, 
             SUM(pii.qty) AS qty,
             ROUND(SUM(pii.qty * pii.rate) / SUM(pii.qty), 2) AS effective_unit_rate, 
-            SUM(pii.qty) * ROUND(SUM(pii.qty * pii.rate) / SUM(pii.qty), 2) AS value
+            SUM(pii.qty) * ROUND(SUM(pii.qty * pii.rate) / SUM(pii.qty), 2) AS value,
+            
         FROM 
             (SELECT 
                 piit.item_code, 
-                
                 piit.uom, 
                 piit.qty, 
-                piit.rate
+                piit.rate,
+                
+                
             FROM 
                 `tabPurchase Invoice Item` AS piit
+            INNER JOIN 
+                `tabPurchase Order` AS po ON piit.parent = po.name
+            INNER JOIN 
+                `tabPurchase Invoice` AS pi ON piit.parent = pi.name
             WHERE 
-                piit.parent IN (SELECT name FROM `tabPurchase Invoice` WHERE update_stock = 1)) AS pii
+                pi.update_stock = 1) AS pii
         INNER JOIN 
             (SELECT 
                 item.item_code, 
@@ -102,10 +133,18 @@ def get_data_updated():
                 `tabItem Barcode` AS item_barcode ON item.name = item_barcode.parent) AS it
         ON 
             pii.item_code = it.item_code
+        WHERE 1=1
+        {conditions}
         GROUP BY 
-            it.item_code;
+            pii.item_code, 
+           
     """
-    data = frappe.db.sql(query, as_dict=True)
+
+    
+    if item_name:
+        data = frappe.db.sql(query, item_name, as_dict=True)
+    else:
+        data = frappe.db.sql(query, as_dict=True)
     
     for entry in data:
         entry['item_name'] = frappe.db.get_value("Item", entry['item_code_number'], 'item_name')

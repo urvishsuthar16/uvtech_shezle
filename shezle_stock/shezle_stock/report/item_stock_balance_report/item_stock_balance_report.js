@@ -3,7 +3,13 @@
 /* eslint-disable */
 
 frappe.query_reports["item Stock Balance report"] = {
-	"filters": [
-
-	]
+	filters: [
+        {
+            fieldname: 'periodicity',
+            label: __('Periodicity'),
+            fieldtype: 'Select',
+            options: ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly',''],
+            default: 'Yearly',
+        }
+    ],
 };
