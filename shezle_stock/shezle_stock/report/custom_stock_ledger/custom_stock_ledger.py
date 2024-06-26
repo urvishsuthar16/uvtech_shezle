@@ -3,16 +3,18 @@ import frappe
 def execute(filters):
     item_filter = filters.get('item')
     customer_filter = filters.get('customer')
+    from_date = filters.get('from_date')
+    to_date = filters.get('to_date')
 
     # Get column definitions
     columns = get_columns()
 
     # Fetch and compile data with filters
-    invoices_with_items = get_invoice_with_items(item_filter)
-    invoices_with_items_purchase = get_invoice_with_items_purchase(item_filter)
-    sales_orders_with_customers = get_sales_order_with_customer(item_filter, customer_filter)
-    invoices_with_items_return = get_invoice_with_items_return(item_filter)
-    sales_orders_with_customers_return = get_sales_order_with_customer_return(item_filter, customer_filter)
+    invoices_with_items = get_invoice_with_items(item_filter, from_date, to_date)
+    invoices_with_items_purchase = get_invoice_with_items_purchase(item_filter, from_date, to_date)
+    sales_orders_with_customers = get_sales_order_with_customer(item_filter, customer_filter, from_date, to_date)
+    invoices_with_items_return = get_invoice_with_items_return(item_filter, from_date, to_date)
+    sales_orders_with_customers_return = get_sales_order_with_customer_return(item_filter, customer_filter, from_date, to_date)
 
     # Combine data from different sources
     data = compile_data(invoices_with_items, sales_orders_with_customers)
@@ -108,11 +110,13 @@ def compile_data(invoices, sales_orders_with_customers):
         })
     return data
 
-def get_invoice_with_items(item_name=None):
+def get_invoice_with_items(item_name=None, from_date=None, to_date=None):
     conditions = ""
     if item_name:
         conditions += f" AND pii.item_code = '{item_name}'"
-        
+    if from_date and to_date:
+        conditions += f" AND pi.posting_date BETWEEN '{from_date}' AND '{to_date}'"
+
     sql_query = f"""
     SELECT 
         pii.parenttype,
@@ -126,7 +130,8 @@ def get_invoice_with_items(item_name=None):
         SUM(pii.amount) AS total_gross_total_value,
         pii.uom,
         pi.discount_amount,
-        SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst
+        SUM(pii.cgst_amount + pii.sgst_amount + pii.igst_amount) AS total_gst,
+        pi.posting_date
     FROM 
         `tabPurchase Invoice` pi
     JOIN 
@@ -150,10 +155,12 @@ def get_invoice_with_items(item_name=None):
 
     return invoices_with_items
 
-def get_invoice_with_items_purchase(item_name=None):
+def get_invoice_with_items_purchase(item_name=None, from_date=None, to_date=None):
     conditions = ""
     if item_name:
         conditions += f" AND pii.item_code = '{item_name}'"
+    if from_date and to_date:
+        conditions += f" AND pi.posting_date BETWEEN '{from_date}' AND '{to_date}'"
         
     sql_query = f"""
     SELECT 
@@ -192,11 +199,13 @@ def get_invoice_with_items_purchase(item_name=None):
 
     return invoices_with_items
 
-def get_sales_order_with_customer(item_name=None, customer_name=None):
+def get_sales_order_with_customer(item_name=None, customer_name=None, from_date=None, to_date=None):
     conditions = ""
     
     if customer_name:
         conditions += f" AND so.customer_name = '{customer_name}'"
+    if from_date and to_date:
+        conditions += f" AND so.transaction_date BETWEEN '{from_date}' AND '{to_date}'"
     
     sql_query = f"""
     SELECT
@@ -211,7 +220,6 @@ def get_sales_order_with_customer(item_name=None, customer_name=None):
         sii.uom,
         so.discount_amount,
         SUM(sii.cgst_amount + sii.sgst_amount + sii.igst_amount) AS total_gst
-        
     FROM
         `tabSales Order` so
     JOIN
@@ -225,10 +233,12 @@ def get_sales_order_with_customer(item_name=None, customer_name=None):
     sales_orders_with_customers = frappe.db.sql(sql_query, as_dict=True)
     return sales_orders_with_customers
 
-def get_invoice_with_items_return(item_name=None):
+def get_invoice_with_items_return(item_name=None, from_date=None, to_date=None):
     conditions = ""
     if item_name:
         conditions += f" AND sii.item_code = '{item_name}'"
+    if from_date and to_date:
+        conditions += f" AND si.posting_date BETWEEN '{from_date}' AND '{to_date}'"
         
     sql_query = f"""
     SELECT 
@@ -267,18 +277,14 @@ def get_invoice_with_items_return(item_name=None):
 
     return invoices_with_items
 
-def get_sales_order_with_customer_return(item_name=None, customer_name=None):
-    # Initialize the conditions string
+def get_sales_order_with_customer_return(item_name=None, customer_name=None, from_date=None, to_date=None):
     conditions = ""
     
-    # Append item name condition if provided
-    
-    
-    # Append customer name condition if provided
     if customer_name:
         conditions += f" AND si.customer_name = '{customer_name}'"
+    if from_date and to_date:
+        conditions += f" AND si.posting_date BETWEEN '{from_date}' AND '{to_date}'"
     
-    # SQL query to retrieve the sales orders with customer returns
     sql_query = f"""
     SELECT
         sii.parenttype,
@@ -302,19 +308,11 @@ def get_sales_order_with_customer_return(item_name=None, customer_name=None):
     GROUP BY
         sii.item_code, si.customer_name
     """
-    
-    # Execute the SQL query
     sales_orders_with_customers = frappe.db.sql(sql_query, as_dict=True)
-    
-    # Return the query results
     return sales_orders_with_customers
 
 def find_customer_data(item_code, sales_orders_with_customers):
-    # Iterate through the list of sales orders with customer returns
     for order in sales_orders_with_customers:
-        # Return the order if the item code matches
         if order['item_code'] == item_code:
             return order
-    
-    # Return an empty dictionary if no matching item code is found
     return {}
